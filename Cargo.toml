@@ -1,0 +1,7 @@
+[package]
+name = "timeseries"
+version = "0.1.0"
+authors = ["Ryan Gaus <rsg1egoman@gmail.com>"]
+
+[dependencies]
+chrono = "0.4"
