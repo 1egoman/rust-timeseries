@@ -5,6 +5,8 @@ mod chart;
 use chart::chart::Chart;
 use chart::point::Point;
 
+use std::time::Instant;
+
 fn main() {
     let mut chart = Chart {
       max_index_node_capacity: 3,
@@ -34,10 +36,32 @@ fn main() {
 
     chart.build_index();
 
-    println!("Point at 9:11:00: {}", chart.get_value_vec(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30)).unwrap());
+    {
+      let now = Instant::now();
 
-    let value = chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30));
-    println!("VAL {:?}", value);
+      for _ in 0..1000 {
+        chart.get_value_vec(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30));
+      }
+
+      let elapsed = now.elapsed();
+      let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
+      println!("Vector Seconds: {}", sec / 1000.0);
+    }
+
+    {
+      let now = Instant::now();
+
+      for _ in 0..1000 {
+        chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30));
+      }
+
+      let elapsed = now.elapsed();
+      let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
+      println!("Index Seconds:  {}", sec / 1000.0);
+    }
+
+    /* let value = chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30)); */
+    /* println!("VAL {:?}", value); */
     /* if let Some(node_index) = chart.lookup_in_index(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30)) { */
     /*   println!("Get from index for 9:13:30: {:?}", node_index); */
     /*  */
@@ -48,5 +72,5 @@ fn main() {
     /*   println!("NODE GREATER THAN CURRENT NODE: {:?}", node_more); */
     /* } */
 
-    chart.print_indexes();
+    /* chart.print_indexes(); */
 }

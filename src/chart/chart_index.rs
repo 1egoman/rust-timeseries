@@ -1,5 +1,5 @@
 extern crate chrono;
-use chrono::{DateTime, Utc, TimeZone, NaiveDateTime};
+use chrono::{DateTime, Utc, NaiveDateTime};
 
 use chart::chart::Chart;
 use chart::point_index::PointIndex;
@@ -114,8 +114,7 @@ impl Chart {
 
   // Get the value at a specified timestamp using the index
   pub fn get_value_index(&self, timestamp: DateTime<Utc>) -> Option<f64> {
-    if let Some(node_index) = self.lookup_in_index(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30)) {
-      println!("Get from index for 9:13:30: {:?}", node_index);
+    if let Some(node_index) = self.lookup_in_index(timestamp) {
 
       if let Some(ref node_data) = self.index[node_index].data {
         if timestamp < node_data[0].timestamp {
@@ -150,8 +149,6 @@ impl Chart {
             None
           }
         } else {
-          println!("In bounds");
-
           for point_index in 1..node_data.len()-1 {
             println!("Is {:?} < {:?}", timestamp, node_data[point_index].timestamp);
             if timestamp < node_data[point_index].timestamp {
@@ -162,7 +159,7 @@ impl Chart {
           }
 
           // For checking the last item, the logic is slightly different.
-          if timestamp < node_data[node_data.len()-1].timestamp {
+          if timestamp <= node_data[node_data.len()-1].timestamp {
             let smaller_value = &node_data[node_data.len()-2];
             let larger_value = &node_data[node_data.len()-1];
             return Some(self.interpolate_between_points(timestamp, smaller_value, larger_value));
@@ -279,3 +276,79 @@ impl Chart {
   }
 }
 
+
+#[cfg(test)]
+mod tests {
+  use chrono::{Utc, TimeZone};
+  use chart::chart::Chart;
+  use chart::point::Point;
+
+  #[test]
+  fn it_gets_items_via_index() {
+    let mut chart = Chart {
+      max_index_node_capacity: 3,
+      points: vec![
+        Point::new(5.0, Utc.ymd(2018, 1, 1).and_hms(9, 10, 0)),
+        Point::new(6.0, Utc.ymd(2018, 1, 1).and_hms(9, 11, 0)),
+        Point::new(7.0, Utc.ymd(2018, 1, 1).and_hms(9, 12, 0)),
+        Point::new(8.0, Utc.ymd(2018, 1, 1).and_hms(9, 13, 0)),
+        Point::new(9.0, Utc.ymd(2018, 1, 1).and_hms(9, 14, 0)),
+        Point::new(1.0, Utc.ymd(2018, 1, 1).and_hms(9, 15, 0)),
+        Point::new(2.0, Utc.ymd(2018, 1, 1).and_hms(9, 16, 0)),
+        Point::new(3.0, Utc.ymd(2018, 1, 1).and_hms(9, 17, 0)),
+        Point::new(4.0, Utc.ymd(2018, 1, 1).and_hms(9, 18, 0)),
+        Point::new(5.0, Utc.ymd(2018, 1, 1).and_hms(9, 19, 0)),
+        Point::new(6.0, Utc.ymd(2018, 1, 1).and_hms(9, 20, 0)),
+        Point::new(7.0, Utc.ymd(2018, 1, 1).and_hms(9, 21, 0)),
+        Point::new(8.0, Utc.ymd(2018, 1, 1).and_hms(9, 22, 0)),
+        Point::new(9.0, Utc.ymd(2018, 1, 1).and_hms(9, 23, 0)),
+        Point::new(1.0, Utc.ymd(2018, 1, 1).and_hms(9, 24, 0)),
+        Point::new(2.0, Utc.ymd(2018, 1, 1).and_hms(9, 25, 0)),
+        Point::new(3.0, Utc.ymd(2018, 1, 1).and_hms(9, 26, 0)),
+        Point::new(4.0, Utc.ymd(2018, 1, 1).and_hms(9, 27, 0)),
+        Point::new(5.1, Utc.ymd(2018, 1, 1).and_hms(9, 28, 0)),
+      ],
+      index: vec![],
+    };
+    chart.build_index();
+
+    // Exact datapoint somewhere in the middle
+    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 14, 0)), Some(9.0));
+
+    // Interpolated somewhere in the middle (ie, not exactly on a datapoint)
+    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 11, 30)), Some(6.5));
+
+    // First datapoint of whole dataset
+    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 10, 0)), Some(5.0));
+
+    // Last datapoint of whole dataset
+    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 28, 0)), Some(5.1));
+
+    /*
+    11      LEAF    None => 9
+        - 2018-01-01T09:20:00Z 6.0
+        - 2018-01-01T09:21:00Z 7.0
+        - 2018-01-01T09:22:00Z 8.0
+    12      LEAF    None => 9
+        - 2018-01-01T09:23:00Z 9.0
+        - 2018-01-01T09:24:00Z 1.0
+    13      LEAF    None => 10
+        - 2018-01-01T09:25:00Z 2.0
+        - 2018-01-01T09:26:00Z 3.0
+    */
+
+    // The below tests reference the above index layout:
+
+    // In between two nodes
+    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 22, 15)), Some(8.25));
+
+    // Right after the start of second index node
+    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 23, 15)), Some(7.0));
+
+    // Right between the second and third index node
+    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 24, 15)), Some(1.25));
+
+    // Get value in middle of an index node
+    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 20, 30)), Some(6.5));
+  }
+}

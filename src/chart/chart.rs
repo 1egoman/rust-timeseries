@@ -8,6 +8,7 @@ fn linear_interpolation(starting_value: f64, ending_value: f64, percentage: f64)
   starting_value + ((ending_value - starting_value) * percentage)
 }
 
+// A chart holds datapoints containing a timestamp and value.
 pub struct Chart {
   pub points: Vec<Point>,
   pub index: Vec<PointIndex>,
