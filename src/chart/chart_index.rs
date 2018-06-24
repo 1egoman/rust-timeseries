@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc, NaiveDateTime};
 
 use chart::chart::Chart;
 use chart::point_index::PointIndex;
+use chart::projection::ChartProjection;
 
 impl Chart {
   pub fn rebalance_index_node(&mut self, node_index: usize) {
@@ -112,45 +113,65 @@ impl Chart {
     self.rebalance_index_node(0);
   }
 
-  // Get the value at a specified timestamp using the index
-  pub fn get_value_index(&self, timestamp: DateTime<Utc>) -> Option<f64> {
+  // Given a timestamp and a projection, project the chart and return the value at that point using
+  // the on the projected chart.
+  pub fn get_value_projection(
+    &self,
+    timestamp: DateTime<Utc>,
+    projection: Option<&ChartProjection>,
+  ) -> Option<f64> {
+    debug!(
+      "CALLING chart.get_value_projection({:?}, {})",
+      timestamp,
+      if projection.is_some() { "<projection>" } else { "None" }
+    );
     if let Some(node_index) = self.lookup_in_index(timestamp) {
-
-      if let Some(ref node_data) = self.index[node_index].data {
-        if timestamp < node_data[0].timestamp {
-          println!("Need to get LESS side!");
-
-          if let Some(node_less) = self.get_node_less_than(node_index) {
-            if let Some(ref node_less_data) = self.index[node_less].data {
-              let smaller_value = &node_less_data[node_less_data.len()-1];
-              let larger_value = &node_data[0];
-              return Some(self.interpolate_between_points(timestamp, smaller_value, larger_value));
-            } else {
-              None
+      debug!("Timestamp {} is in node index {}", timestamp, node_index);
+      if let Some(ref node_data) = self.project_index_node(node_index, projection).data {
+        if node_data.len() == 0 {
+          debug!("Index node {} is empty, returning None", node_index);
+          return None;
+        } else if timestamp < node_data[0].timestamp {
+          debug!("Need index node LESS than {} in order to interpolate", node_index);
+          // Need to fetch node index less than current node index in order to get item smaller than
+          // current value.
+          if let Some(node_less_index) = self.get_node_less_than(node_index) {
+            let node_less = self.project_index_node(node_less_index, projection);
+            if let Some(ref node_less_data) = node_less.data {
+              if node_less_data.len() > 0 {
+                let smaller_value = &node_less_data[node_less_data.len()-1];
+                let larger_value = &node_data[0];
+                let interpolated_value = self.interpolate_between_points(
+                  timestamp,
+                  smaller_value,
+                  larger_value,
+                );
+                return Some(interpolated_value);
+              }
             }
-          } else {
-            None
           }
         } else if timestamp > node_data[node_data.len()-1].timestamp {
-          println!("Need to get MORE side!");
-
-          let node_more_wrapped = self.get_node_more_than(node_index);
-          println!("NODE GREATER THAN CURRENT NODE: {:?}", node_more_wrapped);
-
-          if let Some(node_more) = self.get_node_more_than(node_index) {
-            if let Some(ref node_more_data) = self.index[node_more].data {
-              let smaller_value = &node_data[node_data.len()-1];
-              let larger_value = &node_more_data[0];
-              return Some(self.interpolate_between_points(timestamp, smaller_value, larger_value));
-            } else {
-              None
+          debug!("Need index node MORE than {} in order to interpolate", node_index);
+          // Need to fetch node index more than current node index in order to get item larger than
+          // current value.
+          if let Some(node_more_index) = self.get_node_more_than(node_index) {
+            let node_more = self.project_index_node(node_more_index, projection);
+            if let Some(ref node_more_data) = node_more.data {
+              if node_more_data.len() > 0 {
+                let smaller_value = &node_data[node_data.len()-1];
+                let larger_value = &node_more_data[0];
+                let interpolated_value = self.interpolate_between_points(
+                  timestamp,
+                  smaller_value,
+                  larger_value,
+                );
+                return Some(interpolated_value);
+              }
             }
-          } else {
-            None
           }
         } else {
+          debug!("No other index nodes needed other than {}", node_index);
           for point_index in 1..node_data.len()-1 {
-            println!("Is {:?} < {:?}", timestamp, node_data[point_index].timestamp);
             if timestamp < node_data[point_index].timestamp {
               let smaller_value = &node_data[point_index];
               let larger_value = &node_data[point_index+1];
@@ -164,38 +185,49 @@ impl Chart {
             let larger_value = &node_data[node_data.len()-1];
             return Some(self.interpolate_between_points(timestamp, smaller_value, larger_value));
           }
-
-          None
         }
-      } else {
-        None
       }
-    } else {
-      None
     }
+
+    None
+  }
+
+  // Given a timestamp, return the value found at that location on the chart.
+  pub fn get_value(&self, timestamp: DateTime<Utc>) -> Option<f64> {
+    self.get_value_projection(timestamp, None /* no projection */)
   }
 
   // Find the location in the index that would contain a node with `timestamp`.
   pub fn lookup_in_index(&self, timestamp: DateTime<Utc>) -> Option<usize> {
+    debug!("CALLING chart.lookup_in_index({:?})", timestamp);
+    if self.index.len() == 0 {
+      panic!("Index is not built, this is a requirement to lookup in the index!");
+    }
+
     let mut node_index = 0;
     loop {
       match self.index[node_index].timestamp {
         Some(node_timestamp) => {
           // At a regular node. Figure out which leg to traverse down.
+          debug!("Looking up regular node {}", node_index);
           if node_timestamp > timestamp {
+            debug!("Moving in the LESS direction: {} => {}", node_index, self.index[node_index].less);
             node_index = self.index[node_index].less;
           } else {
+            debug!("Moving in the MORE direction: {} => {}", node_index, self.index[node_index].more);
             node_index = self.index[node_index].more;
           }
           continue;
         }
         None => {
           // At a leaf.
+          debug!("Reached leaf {}", node_index);
           break
         }
       }
     }
 
+    debug!("DONE chart.lookup_in_index({:?})", timestamp);
     Some(node_index)
   }
 
@@ -259,7 +291,7 @@ impl Chart {
     let mut ct = 0;
     for index in &self.index {
       if index.timestamp.is_none() {
-        println!("{}\tLEAF\t{:?} => {}", ct, index.timestamp, index.parent);
+        println!("{}\tLEAF\t{:?} => parent:{}", ct, index.timestamp, index.parent);
         if let Some(ref data) = index.data {
           for item in data {
             println!("    - {:?} {:?}", item.timestamp, item.value);
@@ -313,16 +345,16 @@ mod tests {
     chart.build_index();
 
     // Exact datapoint somewhere in the middle
-    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 14, 0)), Some(9.0));
+    assert_eq!(chart.get_value(Utc.ymd(2018, 1, 1).and_hms(9, 14, 0)), Some(9.0));
 
     // Interpolated somewhere in the middle (ie, not exactly on a datapoint)
-    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 11, 30)), Some(6.5));
+    assert_eq!(chart.get_value(Utc.ymd(2018, 1, 1).and_hms(9, 11, 30)), Some(6.5));
 
     // First datapoint of whole dataset
-    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 10, 0)), Some(5.0));
+    assert_eq!(chart.get_value(Utc.ymd(2018, 1, 1).and_hms(9, 10, 0)), Some(5.0));
 
     // Last datapoint of whole dataset
-    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 28, 0)), Some(5.1));
+    assert_eq!(chart.get_value(Utc.ymd(2018, 1, 1).and_hms(9, 28, 0)), Some(5.1));
 
     /*
     11      LEAF    None => 9
@@ -340,15 +372,60 @@ mod tests {
     // The below tests reference the above index layout:
 
     // In between two nodes
-    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 22, 15)), Some(8.25));
+    assert_eq!(chart.get_value(Utc.ymd(2018, 1, 1).and_hms(9, 22, 15)), Some(8.25));
 
     // Right after the start of second index node
-    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 23, 15)), Some(7.0));
+    assert_eq!(chart.get_value(Utc.ymd(2018, 1, 1).and_hms(9, 23, 15)), Some(7.0));
 
     // Right between the second and third index node
-    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 24, 15)), Some(1.25));
+    assert_eq!(chart.get_value(Utc.ymd(2018, 1, 1).and_hms(9, 24, 15)), Some(1.25));
 
     // Get value in middle of an index node
-    assert_eq!(chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 20, 30)), Some(6.5));
+    assert_eq!(chart.get_value(Utc.ymd(2018, 1, 1).and_hms(9, 20, 30)), Some(6.5));
+  }
+
+  #[test]
+  fn it_gets_items_within_projection() {
+    let mut chart = Chart {
+      max_index_node_capacity: 3,
+      points: vec![
+        Point::new(5.0, Utc.ymd(2018, 1, 1).and_hms(9, 10, 0)),
+        Point::new(6.0, Utc.ymd(2018, 1, 1).and_hms(9, 11, 0)),
+        Point::new(7.0, Utc.ymd(2018, 1, 1).and_hms(9, 12, 0)),
+        Point::new(8.0, Utc.ymd(2018, 1, 1).and_hms(9, 13, 0)),
+        Point::new(9.0, Utc.ymd(2018, 1, 1).and_hms(9, 14, 0)),
+        Point::new(1.0, Utc.ymd(2018, 1, 1).and_hms(9, 15, 0)),
+        Point::new(2.0, Utc.ymd(2018, 1, 1).and_hms(9, 16, 0)),
+        Point::new(3.0, Utc.ymd(2018, 1, 1).and_hms(9, 17, 0)),
+        Point::new(4.0, Utc.ymd(2018, 1, 1).and_hms(9, 18, 0)),
+        Point::new(5.0, Utc.ymd(2018, 1, 1).and_hms(9, 19, 0)),
+        Point::new(6.0, Utc.ymd(2018, 1, 1).and_hms(9, 20, 0)),
+        Point::new(7.0, Utc.ymd(2018, 1, 1).and_hms(9, 21, 0)),
+        Point::new(8.0, Utc.ymd(2018, 1, 1).and_hms(9, 22, 0)),
+        Point::new(9.0, Utc.ymd(2018, 1, 1).and_hms(9, 23, 0)),
+        Point::new(1.0, Utc.ymd(2018, 1, 1).and_hms(9, 24, 0)),
+        Point::new(2.0, Utc.ymd(2018, 1, 1).and_hms(9, 25, 0)),
+        Point::new(3.0, Utc.ymd(2018, 1, 1).and_hms(9, 26, 0)),
+        Point::new(4.0, Utc.ymd(2018, 1, 1).and_hms(9, 27, 0)),
+        Point::new(5.1, Utc.ymd(2018, 1, 1).and_hms(9, 28, 0)),
+      ],
+      index: vec![],
+    };
+    chart.build_index();
+
+    // Create a projection without operations
+    let projection = chart.new_projection(
+      Utc.ymd(2018, 1, 1).and_hms(9, 13, 0), /* start */
+      Utc.ymd(2018, 1, 1).and_hms(9, 18, 0), /* end */
+      vec![],
+    );
+
+    // Check datapoint within projection is correct
+    let value = chart.get_value_projection(Utc.ymd(2018, 1, 1).and_hms(9, 14, 0), Some(&projection));
+    assert_eq!(value, Some(9.0));
+
+    // Check datapoint outside projection is None
+    let value = chart.get_value_projection(Utc.ymd(2018, 1, 1).and_hms(9, 0, 0), Some(&projection));
+    assert_eq!(value, None);
   }
 }

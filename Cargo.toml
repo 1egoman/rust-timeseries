@@ -5,3 +5,5 @@ authors = ["Ryan Gaus <rsg1egoman@gmail.com>"]
 
 [dependencies]
 chrono = "0.4"
+log = "0.4.2"
+simple_logger = "0.5.0"

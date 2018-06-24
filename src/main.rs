@@ -1,3 +1,7 @@
+#[macro_use]
+extern crate log;
+extern crate simple_logger;
+
 extern crate chrono;
 use chrono::{Utc, TimeZone};
 
@@ -8,6 +12,8 @@ use chart::point::Point;
 use std::time::Instant;
 
 fn main() {
+    simple_logger::init().unwrap();
+
     let mut chart = Chart {
       max_index_node_capacity: 3,
       points: vec![
@@ -34,43 +40,49 @@ fn main() {
       index: vec![],
     };
 
+
+
     chart.build_index();
 
-    {
-      let now = Instant::now();
+    let projection = chart.new_projection(
+      Utc.ymd(2018, 1, 1).and_hms(9, 13, 0), /* start */
+      Utc.ymd(2018, 1, 1).and_hms(9, 18, 0), /* end */
+      vec![],
+    );
 
-      for _ in 0..1000 {
-        chart.get_value_vec(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30));
-      }
 
-      let elapsed = now.elapsed();
-      let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
-      println!("Vector Seconds: {}", sec / 1000.0);
-    }
+    let timestamp = Utc.ymd(2018, 1, 1).and_hms(9, 12, 30);
 
-    {
-      let now = Instant::now();
+    println!("{:?}", chart.get_value_projection(timestamp, Some(&projection)));
 
-      for _ in 0..1000 {
-        chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30));
-      }
 
-      let elapsed = now.elapsed();
-      let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
-      println!("Index Seconds:  {}", sec / 1000.0);
-    }
 
-    /* let value = chart.get_value_index(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30)); */
-    /* println!("VAL {:?}", value); */
-    /* if let Some(node_index) = chart.lookup_in_index(Utc.ymd(2018, 1, 1).and_hms(9, 13, 30)) { */
-    /*   println!("Get from index for 9:13:30: {:?}", node_index); */
+    chart.print_indexes();
+
+
+    /* // The vector */
+    /* { */
+    /*   let now = Instant::now(); */
     /*  */
-    /*   let node_less = chart.get_node_less_than(node_index); */
-    /*   println!("NODE LESS THAN CURRENT NODE: {:?}", node_less); */
+    /*   for _ in 0..1000 { */
+    /*     chart.get_value_vec(timestamp); */
+    /*   } */
     /*  */
-    /*   let node_more = chart.get_node_more_than(node_index); */
-    /*   println!("NODE GREATER THAN CURRENT NODE: {:?}", node_more); */
+    /*   let elapsed = now.elapsed(); */
+    /*   let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0); */
+    /*   println!("Vector Seconds: {}", sec / 1000.0); */
     /* } */
-
-    /* chart.print_indexes(); */
+    /*  */
+    /* // The index */
+    /* { */
+    /*   let now = Instant::now(); */
+    /*  */
+    /*   for _ in 0..1000 { */
+    /*     chart.get_value(timestamp); */
+    /*   } */
+    /*  */
+    /*   let elapsed = now.elapsed(); */
+    /*   let sec = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0); */
+    /*   println!("Index Seconds:  {}", sec / 1000.0); */
+    /* } */
 }
