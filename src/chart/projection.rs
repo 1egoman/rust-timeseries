@@ -57,30 +57,30 @@ impl ProjectionOperationResult {
 }
 
 
-/* pub struct ProjectionOperationNode { */
-/*   node: Option<&PointIndex>, */
-/*   index: usize, */
-/* } */
-/* impl ProjectionOperationNode { */
-/*   fn new(point_index: &PointIndex) -> ProjectionOperationNode { */
-/*     ProjectionOperationNode { */
-/*       node: Some(point_index), */
-/*       index: 0, */
-/*     } */
-/*   } */
-/*  */
-/*   fn update_index(&self, index: usize) { */
-/*     self.node = None */
-/*     self.index = index */
-/*   } */
-/*  */
-/*   fn value(disposable: ProjectionDisposable) -> (&PointIndex, ProjectionDisposable) { */
-/*     match self.node { */
-/*       Some(node) => (node, disposable), */
-/*       None => (disposable.get(), disposable), */
-/*     } */
-/*   } */
-/* } */
+pub struct ProjectionOperationNode<'a> {
+  node: Option<&'a PointIndex>,
+  index: usize,
+}
+impl<'a> ProjectionOperationNode<'a> {
+  fn new(point_index: &'a PointIndex) -> ProjectionOperationNode {
+    ProjectionOperationNode {
+      node: Some(point_index),
+      index: 0,
+    }
+  }
+
+  fn update_index(&mut self, index: usize) {
+    self.node = None;
+    self.index = index;
+  }
+
+  fn value(&'a self, disposable: &'a ProjectionDisposable) -> &PointIndex {
+    match self.node {
+      Some(ref node) => node,
+      None => disposable.get(self.index),
+    }
+  }
+}
 
 
 
