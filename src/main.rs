@@ -42,22 +42,22 @@ fn main() {
 
 
 
-    chart.build_index();
-
-    let projection = chart.new_projection(
-      Utc.ymd(2018, 1, 1).and_hms(9, 13, 0), /* start */
-      Utc.ymd(2018, 1, 1).and_hms(9, 18, 0), /* end */
-      vec![],
-    );
-
-
-    let timestamp = Utc.ymd(2018, 1, 1).and_hms(9, 12, 30);
-
-    println!("{:?}", chart.get_value_projection(timestamp, Some(&projection)));
-
-
-
-    chart.print_indexes();
+    /* chart.build_index(); */
+    /*  */
+    /* let projection = chart.new_projection( */
+    /*   Utc.ymd(2018, 1, 1).and_hms(9, 13, 0), /* start */ */
+    /*   Utc.ymd(2018, 1, 1).and_hms(9, 18, 0), /* end */ */
+    /*   vec![], */
+    /* ); */
+    /*  */
+    /*  */
+    /* let timestamp = Utc.ymd(2018, 1, 1).and_hms(9, 12, 30); */
+    /*  */
+    /* println!("{:?}", chart.get_value_projection(timestamp, Some(&projection))); */
+    /*  */
+    /*  */
+    /*  */
+    /* chart.print_indexes(); */
 
 
     /* // The vector */

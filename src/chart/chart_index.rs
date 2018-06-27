@@ -3,7 +3,8 @@ use chrono::{DateTime, Utc, NaiveDateTime};
 
 use chart::chart::Chart;
 use chart::point_index::PointIndex;
-use chart::projection::ChartProjection;
+use chart::projection::Projection;
+use chart::projection::ProjectionDisposable;
 
 impl Chart {
   pub fn rebalance_index_node(&mut self, node_index: usize) {
@@ -118,7 +119,7 @@ impl Chart {
   pub fn get_value_projection(
     &self,
     timestamp: DateTime<Utc>,
-    projection: Option<&ChartProjection>,
+    projection: Option<(&Projection, &mut ProjectionDisposable)>,
   ) -> Option<f64> {
     debug!(
       "CALLING chart.get_value_projection({:?}, {})",
@@ -127,7 +128,8 @@ impl Chart {
     );
     if let Some(node_index) = self.lookup_in_index(timestamp) {
       debug!("Timestamp {} is in node index {}", timestamp, node_index);
-      if let Some(ref node_data) = self.project_index_node(node_index, projection).data {
+      let (node, projection) = self.project_index_node(node_index, projection);
+      if let Some(ref node_data) = node.data {
         if node_data.len() == 0 {
           debug!("Index node {} is empty, returning None", node_index);
           return None;
@@ -136,7 +138,7 @@ impl Chart {
           // Need to fetch node index less than current node index in order to get item smaller than
           // current value.
           if let Some(node_less_index) = self.get_node_less_than(node_index) {
-            let node_less = self.project_index_node(node_less_index, projection);
+            let (node_less, projection) = self.project_index_node(node_less_index, projection);
             if let Some(ref node_less_data) = node_less.data {
               if node_less_data.len() > 0 {
                 let smaller_value = &node_less_data[node_less_data.len()-1];
@@ -155,7 +157,7 @@ impl Chart {
           // Need to fetch node index more than current node index in order to get item larger than
           // current value.
           if let Some(node_more_index) = self.get_node_more_than(node_index) {
-            let node_more = self.project_index_node(node_more_index, projection);
+            let (node_more, projection) = self.project_index_node(node_more_index, projection);
             if let Some(ref node_more_data) = node_more.data {
               if node_more_data.len() > 0 {
                 let smaller_value = &node_data[node_data.len()-1];
